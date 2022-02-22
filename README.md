@@ -8,6 +8,10 @@ Simple Reader of [Etcd Raft](https://github.com/etcd-io/etcd/tree/main/contrib/r
 
 TODO
 
+```sh
+go install github.com/117503445/etcd-raft-bin-reader@latest # build from source
+```
+
 ### Usage
 
 ```sh
