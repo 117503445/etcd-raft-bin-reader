@@ -30,67 +30,76 @@ func init() {
 
 func main() {
 	fmt.Printf("WAL Directory: %s, Snapshot Dictory: %s\n", walDir, snapDir)
-	snapshot := loadSnapshot(snapDir)
-	fmt.Println(`========= snapshot =========`)
-
-	fmt.Println(`--------- Metadata ---------`)
-	fmt.Printf("Index: %d\n", snapshot.Metadata.Index)
-	fmt.Printf("Term: %d\n", snapshot.Metadata.Term)
-
-	fmt.Printf("Conf.nodes: %v\n",snapshot.Metadata.ConfState.Nodes)
-
-	fmt.Println(``)
-	fmt.Println(`--------- Data ---------`)
-	fmt.Println(string(snapshot.Data))
-
-	fmt.Println(``)
-	fmt.Println(`========= WAL =========`)
-
-	w := openWAL(walDir, snapshot)
-	metadata, state, ents, err := w.ReadAll()
+	snapshot, err := loadSnapshot(snapDir)
 	if err != nil {
-		panic(err)
-	}
+		fmt.Printf("load snapshot failed, err = %v\n", err)
+	} else {
+		fmt.Println(`========= snapshot =========`)
 
-	fmt.Println(``)
-	fmt.Println(`--------- Metadata ---------`)
-	fmt.Printf("metadata: %s\n", metadata)
+		fmt.Println(`--------- Metadata ---------`)
+		fmt.Printf("Index: %d\n", snapshot.Metadata.Index)
+		fmt.Printf("Term: %d\n", snapshot.Metadata.Term)
 
-	fmt.Println(``)
-	fmt.Println(`--------- HardState ---------`)
-	fmt.Printf("Term: %d\n", state.Term)
-	fmt.Printf("Commit: %d\n", state.Commit)
-	fmt.Printf("Vote: %d\n", state.Vote)
+		fmt.Printf("Conf.nodes: %v\n", snapshot.Metadata.ConfState.Nodes)
 
-	fmt.Println(``)
-	fmt.Println(`--------- Entries ---------`)
-	for i, ent := range ents {
 		fmt.Println(``)
-		fmt.Printf("Index %d\n", i)
-		fmt.Printf("Entry.Index: %d\n", ent.Index)
-		fmt.Printf("Entry.Term: %d\n", ent.Term)
-		fmt.Printf("Entry.Type: %s\n", ent.Type.String())
-		// fmt.Printf("Entry.Data: %s\n", ent.Data)
-		var kvData kv
-		if err := gob.NewDecoder(bytes.NewBuffer(ent.Data)).Decode(&kvData); err != nil {
-			fmt.Println(`ent.Data is not invalid...?`)
-		} else {
-			fmt.Printf("Entry.Data (gob decoded): %#v\n", kvData)
+		fmt.Println(`--------- Data ---------`)
+		fmt.Println(string(snapshot.Data))
+	}
+	fmt.Println(``)
+
+	w, err := openWAL(walDir, snapshot)
+	if err != nil {
+		fmt.Printf("open wal failed, err = %v\n", err)
+	} else {
+		fmt.Println(`========= WAL =========`)
+
+		metadata, state, ents, err := w.ReadAll()
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println(``)
+		fmt.Println(`--------- Metadata ---------`)
+		fmt.Printf("metadata: %s\n", metadata)
+
+		fmt.Println(``)
+		fmt.Println(`--------- HardState ---------`)
+		fmt.Printf("Term: %d\n", state.Term)
+		fmt.Printf("Commit: %d\n", state.Commit)
+		fmt.Printf("Vote: %d\n", state.Vote)
+
+		fmt.Println(``)
+		fmt.Println(`--------- Entries ---------`)
+		for i, ent := range ents {
+			fmt.Println(``)
+			fmt.Printf("Index %d\n", i)
+			fmt.Printf("Entry.Index: %d\n", ent.Index)
+			fmt.Printf("Entry.Term: %d\n", ent.Term)
+			fmt.Printf("Entry.Type: %s\n", ent.Type.String())
+			// fmt.Printf("Entry.Data: %s\n", ent.Data)
+			var kvData kv
+			if err := gob.NewDecoder(bytes.NewBuffer(ent.Data)).Decode(&kvData); err != nil {
+				fmt.Println(`ent.Data is not invalid...?`)
+			} else {
+				fmt.Printf("Entry.Data (gob decoded): %#v\n", kvData)
+			}
 		}
 	}
+
 	fmt.Println(`Done!`)
 }
 
-func loadSnapshot(snapDir string) *raftpb.Snapshot {
+func loadSnapshot(snapDir string) (*raftpb.Snapshot, error) {
 	snapshotter := snap.New(snapDir)
 	snapshot, err := snapshotter.Load()
-	if err != nil && err != snap.ErrNoSnapshot {
-		panic(err)
+	if err != nil {
+		return nil, err
 	}
-	return snapshot
+	return snapshot, nil
 }
 
-func openWAL(walDir string, snapshot *raftpb.Snapshot) *wal.WAL {
+func openWAL(walDir string, snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 	walsnap := walpb.Snapshot{}
 	if snapshot != nil {
 		walsnap.Index, walsnap.Term = snapshot.Metadata.Index, snapshot.Metadata.Term
@@ -98,8 +107,8 @@ func openWAL(walDir string, snapshot *raftpb.Snapshot) *wal.WAL {
 	fmt.Printf("loading WAL at term %d and index %d\n", walsnap.Term, walsnap.Index)
 	w, err := wal.Open(walDir, walsnap)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return w
+	return w, nil
 }
